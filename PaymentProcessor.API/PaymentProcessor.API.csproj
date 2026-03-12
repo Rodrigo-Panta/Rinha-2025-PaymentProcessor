@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.13" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PaymentProcessor.Domain\PaymentProcessor.Domain.csproj" />
+    <ProjectReference Include="..\PaymentProcessor.Application\PaymentProcessor.Application.csproj" />
+    <ProjectReference Include="..\PaymentProcessor.Infra\PaymentProcessor.Infra.csproj" />
+  </ItemGroup>
+
+</Project>
