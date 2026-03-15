@@ -1,9 +1,8 @@
 namespace PaymentProcessor.Infra.Repositories;
 
+using System.Net;
 using System.Net.Http.Json;
 using System.Web;
-using PaymentProcessor.Application.Queries;
-using PaymentProcessor.Application.Repositories;
 using PaymentProcessor.Domain.Entities;
 using PaymentProcessor.Infra.Dtos.CreatePaymentRequest;
 using PaymentProcessor.Infra.Dtos.GetPayment;
@@ -39,43 +38,61 @@ public abstract class BaseHttpPaymentRepository : IHttpPaymentRepository
 
     }
 
-
     public async Task<Payment?> GetByCorrelationId(Guid correlationId)
     {
-        var response = await _httpClient
-            .GetAsync($"/payments/{correlationId}");
+        try
+        {
 
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-            return null;
+            var response = await _httpClient
+                .GetAsync($"/payments/{correlationId}");
 
-        response.EnsureSuccessStatusCode();
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
 
-        var body = await response.Content.ReadFromJsonAsync<GetPaymentResponseDto>();
+            response.EnsureSuccessStatusCode();
 
-        if (body == null) return null;
+            var body = await response.Content.ReadFromJsonAsync<GetPaymentResponseDto>();
 
-        return new Payment(
-            body.CorrelationId,
-            body.Amount,
-            body.RequestedAt
-        );
+            if (body == null) return null;
+
+            return new Payment(
+                body.CorrelationId,
+                body.Amount,
+                body.RequestedAt
+            );
+        }
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.NameResolutionError)
+        {
+            throw new HttpRequestException("Error connecting to the payment service. Please try again later.", ex, HttpStatusCode.ServiceUnavailable);
+        }
     }
 
     public async Task<GetServiceHealthResponseDto> GetHealth()
     {
-        var response = await _httpClient
-            .GetAsync("/payments/service-health");
-
-        var body = await response.Content.ReadFromJsonAsync<JsonHealthResponse>();
-
-        var responseDto = new GetServiceHealthResponseDto
+        try
         {
-            Status = response.StatusCode,
-            IsFailing = body?.IsFailing ?? true,
-            minResponseTime = body?.minResponseTime ?? int.MaxValue
-        };
+            var response = await _httpClient
+                    .GetAsync("/payments/service-health");
 
-        return responseDto;
+            var body = await response.Content.ReadFromJsonAsync<JsonHealthResponse>();
+
+            var responseDto = new GetServiceHealthResponseDto
+            {
+                Status = response.StatusCode,
+                IsFailing = body?.IsFailing ?? true,
+                minResponseTime = body?.minResponseTime ?? int.MaxValue
+            };
+
+            return responseDto;
+        }
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.NameResolutionError)
+        {
+            throw new HttpRequestException("Error connecting to the payment service. Please try again later.", ex, HttpStatusCode.ServiceUnavailable);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new HttpRequestException("Error fetching payment summary", ex, ex.StatusCode ?? HttpStatusCode.InternalServerError);
+        }
     }
 
     public async Task<GetPaymentSummaryResponseDto> GetSummary(GetPaymentSummaryRequestDto request)
@@ -102,20 +119,20 @@ public abstract class BaseHttpPaymentRepository : IHttpPaymentRepository
             var response = await _httpClient
                 .SendAsync(requestMessage);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                throw new Exception("Error fetching payment summary: request failed " + content);
-            }
+            response.EnsureSuccessStatusCode();
 
             var body = await response.Content.ReadFromJsonAsync<GetPaymentSummaryResponseDto>();
             if (body == null)
-                throw new Exception("Error fetching payment summary: response is null");
+                throw new HttpRequestException("Error fetching payment summary: response is null", new Exception(), HttpStatusCode.InternalServerError);
             return body;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.NameResolutionError)
         {
-            throw new Exception("Error fetching payment summary", ex);
+            throw new HttpRequestException("Error connecting to the payment service. Please try again later.", ex, HttpStatusCode.ServiceUnavailable);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new HttpRequestException("Error fetching payment summary", ex, ex.StatusCode ?? HttpStatusCode.InternalServerError);
         }
 
     }

@@ -1,6 +1,7 @@
 using PaymentProcessor.Application.Commands;
 using PaymentProcessor.Application.Repositories;
 using PaymentProcessor.Domain.Entities;
+using PaymentProcessor.Domain.Exceptions;
 
 namespace PaymentProcessor.Application.Handlers
 {
@@ -16,12 +17,12 @@ namespace PaymentProcessor.Application.Handlers
         {
 
             if (command.Amount <= 0)
-                throw new ArgumentException("Amount must be greater than zero.");
+                throw new InvalidInputException("Amount must be greater than zero.");
 
             var existingPayment = await _paymentProcessor.GetByCorrelationId(command.CorrelationId);
 
             if (existingPayment != null)
-                throw new InvalidOperationException("A payment with the same CorrelationId already exists.");
+                throw new DuplicatedEntityException("A payment with the same CorrelationId already exists.");
 
             var payment = new Payment(
                 command.CorrelationId,

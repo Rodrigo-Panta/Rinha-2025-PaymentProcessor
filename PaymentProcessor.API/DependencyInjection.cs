@@ -8,7 +8,9 @@ namespace PaymentProcessor.API
     {
         public static void AddDependencyInjection(this IServiceCollection services)
         {
+
             services.AddControllers();
+
             services.AddOpenApi();
             services.AddHttpClient();
 
