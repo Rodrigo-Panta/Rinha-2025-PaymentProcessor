@@ -6,6 +6,7 @@
 
 # Custom
 external-infra/
+external-doc/
 .env
 
 # User-specific files
