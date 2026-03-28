@@ -74,6 +74,12 @@ public class FacadePaymentRepository : IPaymentRepository
             if (success) return;
         }
 
+        if (fallbackIsHealthy)
+        {
+            var success = await TryAddToRepository(defaultRepository, entity, "default (healthy but fallback is slower)");
+            if (success) return;
+        }
+
         throw new HttpRequestException("All payment repositories are unavailable", new Exception(), HttpStatusCode.ServiceUnavailable);
     }
 
