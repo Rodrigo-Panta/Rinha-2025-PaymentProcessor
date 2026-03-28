@@ -5,8 +5,7 @@
 .vscode/
 
 # Custom
-external-infra/
-external-doc/
+external/
 .env
 
 # User-specific files

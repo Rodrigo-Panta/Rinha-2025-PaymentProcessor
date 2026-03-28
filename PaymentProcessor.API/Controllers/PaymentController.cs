@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using PaymentProcessor.Application.Commands;
 using PaymentProcessor.Application.Handlers;

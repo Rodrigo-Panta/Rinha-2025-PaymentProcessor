@@ -18,6 +18,8 @@ public abstract class BaseHttpPaymentRepository : IHttpPaymentRepository
     {
         _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(GetBaseUrl());
+        _httpClient.Timeout = TimeSpan.FromSeconds(10);
+
     }
 
     protected abstract string GetBaseUrl();

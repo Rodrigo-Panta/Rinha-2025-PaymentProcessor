@@ -7,32 +7,60 @@ using PaymentProcessor.Application.Repositories;
 using PaymentProcessor.Domain.Entities;
 using PaymentProcessor.Application.Dtos.GetPaymentSummary;
 using PaymentProcessor.Infra.Dtos.GetPaymentSummary;
+using Microsoft.Extensions.Logging;
 
 public class FacadePaymentRepository : IPaymentRepository
 {
     private readonly IDefaultHttpPaymentRepository defaultRepository;
     private readonly IFallbackHttpPaymentRepository fallbackRepository;
 
-    public FacadePaymentRepository(IDefaultHttpPaymentRepository defaultRepository, IFallbackHttpPaymentRepository fallbackRepository)
+    private readonly ILogger<FacadePaymentRepository> _logger;
+
+    public FacadePaymentRepository(IDefaultHttpPaymentRepository defaultRepository, IFallbackHttpPaymentRepository fallbackRepository, ILogger<FacadePaymentRepository> logger)
     {
         this.defaultRepository = defaultRepository;
         this.fallbackRepository = fallbackRepository;
+        _logger = logger;
     }
 
     public async Task Add(Payment entity)
     {
-        var defaultRepositoryHealth = await defaultRepository.GetHealth();
-        var defaultIsHealthy = defaultRepositoryHealth.Status == HttpStatusCode.OK && !defaultRepositoryHealth.IsFailing;
+        bool defaultIsHealthy;
+        int? defaultResponseTime = null;
+        bool fallbackIsHealthy;
+        int? fallbackResponseTime = null;
+
+        try
+        {
+            var defaultRepositoryHealth = await defaultRepository.GetHealth();
+            defaultIsHealthy = defaultRepositoryHealth.Status == HttpStatusCode.OK && !defaultRepositoryHealth.IsFailing;
+            defaultResponseTime = defaultRepositoryHealth.minResponseTime;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking health of default repository");
+            defaultIsHealthy = false;
+        }
 
 
-        if (defaultIsHealthy && defaultRepositoryHealth.minResponseTime < 1000)
+        if (defaultIsHealthy && defaultResponseTime.HasValue && defaultResponseTime.Value < 1000)
         {
             var success = await TryAddToRepository(defaultRepository, entity, "default");
             if (success) return;
         }
 
-        var fallbackRepositoryHealth = await fallbackRepository.GetHealth();
-        var fallbackIsHealthy = fallbackRepositoryHealth.Status == HttpStatusCode.OK && !fallbackRepositoryHealth.IsFailing;
+        try
+        {
+            var fallbackRepositoryHealth = await fallbackRepository.GetHealth();
+            fallbackIsHealthy = fallbackRepositoryHealth.Status == HttpStatusCode.OK && !fallbackRepositoryHealth.IsFailing;
+            fallbackResponseTime = fallbackRepositoryHealth.minResponseTime;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking health of fallback repository");
+            fallbackIsHealthy = false;
+        }
+
 
         if (!defaultIsHealthy && fallbackIsHealthy)
         {
@@ -40,19 +68,45 @@ public class FacadePaymentRepository : IPaymentRepository
             if (success) return;
         }
 
-        if (defaultIsHealthy && fallbackIsHealthy && defaultRepositoryHealth.minResponseTime < fallbackRepositoryHealth.minResponseTime)
+        if (defaultIsHealthy && fallbackIsHealthy && defaultResponseTime < fallbackResponseTime)
         {
             var success = await TryAddToRepository(defaultRepository, entity, "default (healthy but fallback is slower)");
             if (success) return;
         }
 
+        throw new HttpRequestException("All payment repositories are unavailable", new Exception(), HttpStatusCode.ServiceUnavailable);
     }
 
     public async Task<Payment?> GetByCorrelationId(Guid correlationId)
     {
-        var PaymentFromDefault = await defaultRepository.GetByCorrelationId(correlationId);
-        if (PaymentFromDefault != null) return PaymentFromDefault;
-        return await fallbackRepository.GetByCorrelationId(correlationId);
+        try
+        {
+            var PaymentFromDefault = await defaultRepository.GetByCorrelationId(correlationId);
+            if (PaymentFromDefault != null) return PaymentFromDefault;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HttpRequestException occurred while fetching payment by correlation ID from default repository");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error occurred while fetching payment by correlation ID from default repository");
+        }
+
+        try
+        {
+            return await fallbackRepository.GetByCorrelationId(correlationId);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HttpRequestException occurred while fetching payment by correlation ID from fallback repository");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error occurred while fetching payment by correlation ID from fallback repository");
+            throw new Exception("An unexpected error occurred while fetching payment data", ex);
+        }
     }
 
     public async Task<GetPaymentSummaryResultDto> GetSummary(GetPaymentSummaryQuery query)

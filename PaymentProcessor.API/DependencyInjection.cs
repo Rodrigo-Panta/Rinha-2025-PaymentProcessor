@@ -12,16 +12,19 @@ namespace PaymentProcessor.API
             services.AddControllers();
 
             services.AddOpenApi();
-            services.AddHttpClient();
+            services.AddHttpClient("HttpClient", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(3);
+            });
 
             // Application
-            services.AddTransient<CreatePaymentHandler>();
-            services.AddTransient<GetPaymentSummaryHandler>();
+            services.AddScoped<CreatePaymentHandler>();
+            services.AddScoped<GetPaymentSummaryHandler>();
 
             // Infra
-            services.AddTransient<IDefaultHttpPaymentRepository, DefaultHttpPaymentRepository>();
-            services.AddTransient<IFallbackHttpPaymentRepository, FallbackHttpPaymentRepository>();
-            services.AddTransient<IPaymentRepository, FacadePaymentRepository>();
+            services.AddScoped<IDefaultHttpPaymentRepository, DefaultHttpPaymentRepository>();
+            services.AddScoped<IFallbackHttpPaymentRepository, FallbackHttpPaymentRepository>();
+            services.AddScoped<IPaymentRepository, FacadePaymentRepository>();
         }
     }
 }
